@@ -10,13 +10,18 @@ from sklearn import linear_model, datasets, metrics
 from sklearn.cross_validation import train_test_split
 from sklearn.neural_network import BernoulliRBM
 from sklearn.pipeline import Pipeline
+from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
+from sklearn import tree
+import modeML
+from sklearn.feature_selection import chi2
+from sklearn.feature_selection import SelectKBest
 
 uniq_elems = {}
 
 def main(train, test, out, mode):
   
   train_f , train_l , train_i = load_vectors(train)
-  
   
   if mode == 'test':
     train_f, test_f, train_l, test_l = train_test_split(train_f, train_l,
@@ -32,7 +37,7 @@ def main(train, test, out, mode):
   else:
     test_f , test_l , test_i = load_vectors(test, create_f = False)
     print test_f.shape , len(test_l) , len(test_i)
-    out = open(out,'wb')
+    out = open(out, 'wb')
     out.write("id,cuisine\n")
     for features, ide in zip(test_f, test_i):
       label = model.predict(features)
@@ -48,24 +53,9 @@ def get_accuracy(train_f, train_l, test_f, test_l, model):
       false += 1
   return true*1.0/(false + true)
 
-
 @timeit
 def cmodel(f, l):
-  
-  # Models we will use
-#  logistic = linear_model.LogisticRegression()
-#  rbm = BernoulliRBM(random_state=0, verbose=True)
-#  classifier = Pipeline(steps=[('rbm', rbm), ('logistic', logistic)])
-
-#  rbm.learning_rate = 0.06
-#  rbm.n_iter = 20
-#  rbm.n_components = 100
-#  logistic.C = 6000.0
-
-#  classifier.fit(f, l)
-
-  classifier = RandomForestClassifier(n_estimators=10, verbose = True)
-#  classifier = linear_model.LogisticRegression()
+  classifier = linear_model.LogisticRegression(multi_class = 'ovr', solver = 'liblinear', verbose = 2, max_iter = 1000)
   classifier.fit(f, l)
   return classifier
 
@@ -78,6 +68,8 @@ def load_vectors(fname, create_f = True):
   ids = [] 
   for elem in data:
     i =  elem.get('ingredients',None)
+    i = [e.lower().split() for e in i]
+    i = reduce(lambda x,y:x + y,i)
     c = elem.get('cuisine',None)
     ide = elem.get('id')
     ids += [ide]
@@ -92,23 +84,23 @@ def load_vectors(fname, create_f = True):
       labels += [uniq_elems[c]]
     
   features = to_sparse_matrix(features)  
-  #features = reduce_dim(features)
+#  features , labels = reduce_dim(features, labels)
   return features , labels, ids
 
 @timeit
-def reduce_dim(mat):
-  pca = PCA(n_components=50)
-  return pca.fit_transform(mat)
-
+def reduce_dim(f,l):
+  best_f = SelectKBest(chi2, k=100)
+  f = best_f.fit_transform(f, l)
+  return f , l
+  
 @timeit
 def to_sparse_matrix(ll):
   w , h = len(ll) , len(uniq_elems)
   mat = scipy.sparse.dok_matrix((w,h))
   for i in range(w):
     for j in ll[i]:
-      mat[i,j] = 1    
-  return mat.todense()
-    
+      mat[i,j] += 1    
+  return mat
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser(description = "Generate model")
